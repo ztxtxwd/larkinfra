@@ -1,0 +1,31 @@
+{
+  "name": "@larkinfra/gateway",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "larkinfra-gateway": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@duckdb/node-api": "1.4.5-r.1",
+    "@hono/node-server": "^1.14.1",
+    "@larkinfra/shared": "workspace:*",
+    "@larksuiteoapi/node-sdk": "^1.50.0",
+    "dotenv": "^18.0.0",
+    "hono": "^4.7.5",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.1",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/ws": "^8.18.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}

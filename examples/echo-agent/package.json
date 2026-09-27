@@ -1,0 +1,20 @@
+{
+  "name": "@larkinfra/echo-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@larkinfra/shared": "workspace:*",
+    "@larksuiteoapi/node-sdk": "^1.50.0",
+    "dotenv": "^18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}

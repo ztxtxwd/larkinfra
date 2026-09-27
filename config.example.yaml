@@ -1,0 +1,39 @@
+listen: ":18787"
+# 若经反向代理对外暴露，填公网可达地址（影响 WS endpoint 下发的 URL）
+# publicHost: "http://127.0.0.1:18787"
+upstream:
+  domain: "https://open.feishu.cn"
+duckdb:
+  path: "./data/larkinfra.duckdb"
+  storeBodies: true
+  bodyMaxChars: 4096
+
+# 业务应用 id/secret 不再需要在此集中配置。
+# Agent 用官方 WSClient 接入时携带 AppID/AppSecret，网关在
+# /callback/ws/endpoint 上自动注册，并按需拉起飞书上游长连接。
+appDefaults:
+  # 自动注册时的默认环境（dev | test | staging | prod）
+  env: "dev"
+  # 连飞书上游的连接数；本地只测下游时可设为 0
+  upstreamConnections: 1
+
+# 可选 bootstrap：启动即连上游（一般不需要；优先用自动注册）
+# apps:
+#   - appId: "cli_xxxxxxxxxxxxxxxx"  # 须满足官方 SDK：cli_ + 16 位十六进制
+#     appSecret: "your_app_secret"
+#     env: "dev"
+#     upstreamConnections: 1
+
+routing:
+  strategy: consistent_hash
+  key: user_id
+  ackTimeoutMs: 2500
+admin:
+  token: "dev-token"
+ws:
+  serviceId: 33554678
+  pingIntervalSec: 90
+  reconnectCount: -1
+  reconnectIntervalSec: 90
+  reconnectNonceSec: 25
+  instanceTtlMs: 180000

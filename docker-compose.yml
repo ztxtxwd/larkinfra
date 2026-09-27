@@ -1,0 +1,12 @@
+services:
+  gateway:
+    image: node:22-bookworm
+    working_dir: /app
+    volumes:
+      - ./:/app
+    command: bash -lc "corepack enable && pnpm install && pnpm --filter @larkinfra/shared build && pnpm --filter @larkinfra/gateway start"
+    ports:
+      - "18787:18787"
+    environment:
+      LARKINFRA_CONFIG: /app/config.yaml
+    # mount your config.yaml before starting
