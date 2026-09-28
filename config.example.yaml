@@ -17,13 +17,6 @@ appDefaults:
   # 连飞书上游的连接数；本地只测下游时可设为 0
   upstreamConnections: 1
 
-# 可选 bootstrap：启动即连上游（一般不需要；优先用自动注册）
-# apps:
-#   - appId: "cli_xxxxxxxxxxxxxxxx"  # 须满足官方 SDK：cli_ + 16 位十六进制
-#     appSecret: "your_app_secret"
-#     env: "dev"
-#     upstreamConnections: 1
-
 routing:
   strategy: consistent_hash
   key: user_id
@@ -37,3 +30,5 @@ ws:
   reconnectIntervalSec: 90
   reconnectNonceSec: 25
   instanceTtlMs: 180000
+  # Agent 握手拉起飞书上游后，若该时长内无实例连上网关则自动关闭上游
+  upstreamIdleTimeoutMs: 60000

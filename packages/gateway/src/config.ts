@@ -23,10 +23,14 @@ export function loadConfig(configPath?: string): GatewayConfig {
     );
   }
 
-  // Apps are registered at agent connect time. Optional bootstrap only via
-  // config.yaml `apps:` — do NOT seed from LARK_APP_ID (that is agent-side).
+  // Apps are registered only at agent connect time — never preconfigured.
   const rawObj =
     typeof raw === "object" && raw ? (raw as Record<string, unknown>) : {};
+  if ("apps" in rawObj) {
+    console.warn(
+      "[config] `apps` is no longer supported and is ignored — agents register on connect",
+    );
+  }
 
   const merged = {
     ...rawObj,
@@ -34,7 +38,6 @@ export function loadConfig(configPath?: string): GatewayConfig {
     publicHost:
       process.env.LARKINFRA_PUBLIC_HOST ??
       (rawObj as GatewayConfig).publicHost,
-    apps: (rawObj as GatewayConfig).apps ?? [],
     admin: {
       token:
         process.env.LARKINFRA_ADMIN_TOKEN ??

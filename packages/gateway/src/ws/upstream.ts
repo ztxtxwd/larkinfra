@@ -36,6 +36,8 @@ export class UpstreamManager {
   private conns: UpstreamConn[] = [];
   /** appIds that already have connect loops started. */
   private startedApps = new Set<string>();
+  /** Pending idle checks for apps started without any online instance. */
+  private idleTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private config: GatewayConfig,
@@ -45,18 +47,14 @@ export class UpstreamManager {
     private store: TraceStore,
   ) {}
 
-  /** Start upstream for every currently registered app (bootstrap seed). */
-  async start(): Promise<void> {
-    for (const app of this.apps.list()) {
-      this.ensureApp(app.appId);
-    }
-  }
-
   /**
    * Ensure upstream WS loops are running for `appId`.
    * Idempotent — safe to call on every agent connect / register.
+   * If no instance is online yet, upstream is closed again unless one
+   * connects within `ws.upstreamIdleTimeoutMs`.
    */
   ensureApp(appId: string): void {
+    this.refreshIdleTimer(appId);
     if (this.startedApps.has(appId)) return;
     const app = this.apps.get(appId);
     if (!app) {
@@ -89,12 +87,60 @@ export class UpstreamManager {
     );
   }
 
-  async stop(): Promise<void> {
-    for (const conn of this.conns) {
-      conn.stopped = true;
-      if (conn.pingTimer) clearTimeout(conn.pingTimer);
-      conn.ws?.terminate();
+  /**
+   * Close all upstream Feishu WS for `appId` (e.g. when its last agent
+   * instance goes offline). A later `ensureApp` starts them again.
+   */
+  stopApp(appId: string, reason = "no online instances"): void {
+    this.clearIdleTimer(appId);
+    if (!this.startedApps.delete(appId)) return;
+    const closing = this.conns.filter((c) => c.app.appId === appId);
+    this.conns = this.conns.filter((c) => c.app.appId !== appId);
+    for (const conn of closing) this.closeConn(conn);
+    if (closing.length > 0) {
+      console.info(
+        `[upstream] stopped app=${appId} connections=${closing.length} (${reason})`,
+      );
     }
+  }
+
+  async stop(): Promise<void> {
+    for (const timer of this.idleTimers.values()) clearTimeout(timer);
+    this.idleTimers.clear();
+    for (const conn of this.conns) this.closeConn(conn);
+    this.conns = [];
+    this.startedApps.clear();
+  }
+
+  /**
+   * Agent handshakes (`/callback/ws/endpoint`) start upstream before the
+   * agent's downstream WS connects. Arm a timer so upstream does not stay
+   * open forever if that connection never arrives.
+   */
+  private refreshIdleTimer(appId: string): void {
+    this.clearIdleTimer(appId);
+    if (this.registry.list(appId).length > 0) return;
+    const timeoutMs = this.config.ws.upstreamIdleTimeoutMs;
+    const timer = setTimeout(() => {
+      this.idleTimers.delete(appId);
+      if (this.registry.list(appId).length > 0) return;
+      this.stopApp(appId, `no instance connected within ${timeoutMs}ms`);
+    }, timeoutMs);
+    timer.unref?.();
+    this.idleTimers.set(appId, timer);
+  }
+
+  private clearIdleTimer(appId: string): void {
+    const timer = this.idleTimers.get(appId);
+    if (!timer) return;
+    clearTimeout(timer);
+    this.idleTimers.delete(appId);
+  }
+
+  private closeConn(conn: UpstreamConn): void {
+    conn.stopped = true;
+    if (conn.pingTimer) clearTimeout(conn.pingTimer);
+    conn.ws?.terminate();
   }
 
   private async connectLoop(conn: UpstreamConn): Promise<void> {
@@ -118,6 +164,8 @@ export class UpstreamManager {
     if (latest) conn.app = latest;
 
     const endpoint = await this.pullEndpoint(conn.app);
+    // App may have been stopped while the endpoint request was in flight.
+    if (conn.stopped) return;
     conn.serviceId = endpoint.serviceId;
     console.info(
       `[upstream] connecting app=${conn.app.appId} url=${endpoint.url}`,

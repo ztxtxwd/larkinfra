@@ -26,6 +26,28 @@ export class InstanceRegistry {
     string,
     Set<{ resolve: () => void; timer: NodeJS.Timeout }>
   >();
+  private appActiveListeners = new Set<(appId: string) => void>();
+  private appEmptyListeners = new Set<(appId: string) => void>();
+
+  /** Fired when an app goes from zero to one connected instance. */
+  onAppActive(listener: (appId: string) => void): void {
+    this.appActiveListeners.add(listener);
+  }
+
+  /** Fired when the last connected instance of an app goes offline. */
+  onAppEmpty(listener: (appId: string) => void): void {
+    this.appEmptyListeners.add(listener);
+  }
+
+  private emit(listeners: Set<(appId: string) => void>, appId: string): void {
+    for (const listener of listeners) {
+      try {
+        listener(appId);
+      } catch (err) {
+        console.error(`[registry] listener error app=${appId}`, err);
+      }
+    }
+  }
 
   private waiterKey(appId: string, instanceId: string): string {
     return `${appId}::${instanceId}`;
@@ -37,12 +59,14 @@ export class InstanceRegistry {
       draining: instance.draining ?? false,
     };
     let appMap = this.byApp.get(full.appId);
+    const wasEmpty = !appMap || appMap.size === 0;
     if (!appMap) {
       appMap = new Map();
       this.byApp.set(full.appId, appMap);
     }
     appMap.set(full.instanceId, full);
     this.bySocket.set(full.socket, full);
+    if (wasEmpty) this.emit(this.appActiveListeners, full.appId);
   }
 
   unregister(socket: WebSocket): AgentInstance | undefined {
@@ -51,8 +75,10 @@ export class InstanceRegistry {
     this.bySocket.delete(socket);
     const appMap = this.byApp.get(instance.appId);
     appMap?.delete(instance.instanceId);
-    if (appMap && appMap.size === 0) this.byApp.delete(instance.appId);
+    const becameEmpty = !!appMap && appMap.size === 0;
+    if (becameEmpty) this.byApp.delete(instance.appId);
     this.notifyOffline(instance.appId, instance.instanceId);
+    if (becameEmpty) this.emit(this.appEmptyListeners, instance.appId);
     return instance;
   }
 

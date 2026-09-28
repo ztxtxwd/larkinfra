@@ -43,7 +43,7 @@ INSTANCE_NAME=agent-b pnpm --filter @larkinfra/echo-agent start
 
 滚动更新时由网关经 WS 下发 `graceful` / `force` 生命周期信号（见 [`examples/echo-agent/README.md`](examples/echo-agent/README.md)）。
 
-也可用环境变量：`LARK_APP_ID` / `LARK_APP_SECRET` / `LARK_DOMAIN`。网关 `appDefaults.env` 控制自动注册应用的默认环境（`dev` | `test` | `staging` | `prod`）；实例上线后继承该值。可选在 `config.yaml` 的 `apps[]` 做启动引导，一般不需要。
+也可用环境变量：`LARK_APP_ID` / `LARK_APP_SECRET` / `LARK_DOMAIN`。网关 `appDefaults.env` 控制自动注册应用的默认环境（`dev` | `test` | `staging` | `prod`）；实例上线后继承该值。网关不支持在 `config.yaml` 预配 app，一律由 Agent 接入时自动注册。
 
 飞书开发者后台将该企业自建应用的事件订阅设为「使用长连接接收事件」，并确保网关进程在线。
 
@@ -71,13 +71,14 @@ pnpm pm2:delete
 
 ## 应用注册
 
-网关**不再要求**集中预配业务 `appId` / `appSecret`。流程：
+网关**不预配**业务 `appId` / `appSecret`（`config.yaml` 中的 `apps` 会被忽略）。流程：
 
 1. Agent 用官方 `WSClient` 指向网关 `domain`，携带自身飞书凭证
 2. SDK 调用网关 `/callback/ws/endpoint`
 3. 网关校验：未见过则注册，已见过则核对 secret
 4. 按 `appDefaults.upstreamConnections` 拉起对该应用的飞书上游长连接
 5. 下发下游 WS URL，Agent 实例上线
+6. 该应用最后一个实例下线时关闭飞书上游；若握手后 `ws.upstreamIdleTimeoutMs`（默认 60s）内没有实例连上，同样关闭
 
 同一 `appId` 后续实例复用已注册凭证；secret 不匹配则拒绝。
 ## 客户端用法

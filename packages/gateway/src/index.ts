@@ -22,13 +22,7 @@ async function main() {
   const store = await openTraceStore(config.duckdb.path);
   const registry = new InstanceRegistry();
   const tickets = new TicketStore();
-  const apps = new AppRegistry(config.apps, config.appDefaults);
-
-  if (config.apps.length > 0) {
-    console.info(
-      `[apps] seeded ${config.apps.length} app(s) from config/env (optional bootstrap)`,
-    );
-  }
+  const apps = new AppRegistry(config.appDefaults);
 
   const app = new Hono();
   app.get("/healthz", (c) => c.json({ ok: true }));
@@ -87,12 +81,13 @@ async function main() {
   upstream = new UpstreamManager(config, apps, registry, downstream, store);
   mountAdminRoutes({ app, config, store, registry, downstream, apps });
 
-  await upstream.start();
-  if (apps.list().length === 0) {
-    console.info(
-      "[gateway] no apps yet — waiting for agents to register via /callback/ws/endpoint",
-    );
-  }
+  // Upstream Feishu WS lives only while the app has online agent instances.
+  registry.onAppActive((appId) => upstream.ensureApp(appId));
+  registry.onAppEmpty((appId) => upstream.stopApp(appId));
+
+  console.info(
+    "[gateway] waiting for agents to register via /callback/ws/endpoint",
+  );
 
   const shutdown = async () => {
     console.info("[gateway] shutting down");

@@ -42,11 +42,9 @@ export const GatewayConfigSchema = z.object({
     })
     .default({}),
   /**
-   * Optional bootstrap apps. Prefer auto-registration: agents bring
-   * AppID/AppSecret on `/callback/ws/endpoint` and the gateway registers them.
+   * Defaults for apps registered at connect time. Apps are never preconfigured:
+   * agents bring AppID/AppSecret on `/callback/ws/endpoint`.
    */
-  apps: z.array(AppConfigSchema).default([]),
-  /** Defaults for apps registered at connect time (not listed under `apps`). */
   appDefaults: AppDefaultsSchema,
   routing: z
     .object({
@@ -68,6 +66,11 @@ export const GatewayConfigSchema = z.object({
       reconnectIntervalSec: z.number().int().positive().default(90),
       reconnectNonceSec: z.number().int().positive().default(25),
       instanceTtlMs: z.number().int().positive().default(180_000),
+      /**
+       * Close an app's Feishu upstream if no agent instance connects within
+       * this window after the endpoint handshake started it.
+       */
+      upstreamIdleTimeoutMs: z.number().int().positive().default(60_000),
     })
     .default({}),
 });

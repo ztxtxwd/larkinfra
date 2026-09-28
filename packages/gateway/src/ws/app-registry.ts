@@ -13,23 +13,17 @@ export type RegisterAppResult =
 
 /**
  * Runtime registry of Feishu apps.
- * Seeded optionally from config; primarily filled when agents call
- * `/callback/ws/endpoint` with AppID/AppSecret.
+ * Filled only when agents call `/callback/ws/endpoint` with AppID/AppSecret.
  */
 export class AppRegistry {
   private apps = new Map<string, AppConfig>();
 
   constructor(
-    seed: AppConfig[] = [],
     private defaults: { env: AppEnv; upstreamConnections: number } = {
       env: "dev",
       upstreamConnections: 1,
     },
-  ) {
-    for (const app of seed) {
-      this.apps.set(app.appId, app);
-    }
-  }
+  ) {}
 
   get(appId: string): AppConfig | undefined {
     return this.apps.get(appId);
