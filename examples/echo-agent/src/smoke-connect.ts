@@ -2,11 +2,22 @@
  * Minimal agent that uses the official SDK with only `domain` overridden.
  * Used for local smoke tests against the gateway.
  */
+import { domainWithEnv, parseAppEnv, tryParseAppEnv } from "@larkinfra/shared";
 import * as Lark from "@larksuiteoapi/node-sdk";
 
 const appId = process.env.LARK_APP_ID ?? "cli_a1b2c3d4e5f67890";
 const appSecret = process.env.LARK_APP_SECRET ?? "test_secret";
-const domain = process.env.LARK_DOMAIN ?? "http://127.0.0.1:18787";
+const rawEnv = process.env.LARK_APP_ENV?.trim();
+if (rawEnv && !tryParseAppEnv(rawEnv)) {
+  throw new Error(
+    `LARK_APP_ENV 无法识别：${rawEnv}。可用 dev、test、staging、prod（stage 视为 staging）`,
+  );
+}
+const env = parseAppEnv(rawEnv, "dev");
+const domain = domainWithEnv(
+  process.env.LARK_DOMAIN ?? "http://127.0.0.1:18787",
+  env,
+);
 const instanceName = process.env.INSTANCE_NAME ?? `smoke-${process.pid}`;
 
 const client = new Lark.Client({ appId, appSecret, domain });

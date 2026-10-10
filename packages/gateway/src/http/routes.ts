@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { GatewayConfig } from "@larkinfra/shared";
-import { truncate, sha256Short } from "@larkinfra/shared";
+import type { AppEnv, GatewayConfig } from "@larkinfra/shared";
+import { peelEnvPrefix, truncate, sha256Short, tryParseAppEnv } from "@larkinfra/shared";
 import type { Context, Hono } from "hono";
 import type { TraceStore } from "../db.js";
 import type { AppRegistry } from "../ws/app-registry.js";
@@ -113,18 +113,38 @@ export function mountHttpRoutes(params: {
 
   /**
    * Agent (official WSClient) handshake: present AppID/AppSecret.
-   * Unknown apps are auto-registered; known apps must match secret.
-   * On (new) registration, gateway starts upstream Feishu WS for that app.
+   * Env is per process, not per appId: the SDK calls `{domain}/callback/ws/endpoint`,
+   * so the agent declares env by setting domain to `http://<gateway>/e/<env>`.
+   * Body field `Env` is also accepted. config.yaml does not assign instance env.
    */
-  app.post("/callback/ws/endpoint", async (c) => {
+  const handleEndpoint = async (c: Context) => {
+    const url = new URL(c.req.url);
+    const peeled = peelEnvPrefix(url.pathname);
+    if (peeled.invalidEnv) {
+      return c.json(
+        {
+          code: 514,
+          msg: `unknown env "${peeled.invalidEnv}"; use dev, test, staging, or prod`,
+        },
+        200,
+      );
+    }
+
     const body = (await c.req.json().catch(() => null)) as {
       AppID?: string;
       AppSecret?: string;
+      Env?: string;
+      env?: string;
     } | null;
     const appId = body?.AppID;
     const appSecret = body?.AppSecret;
     if (!appId || !appSecret) {
       return c.json({ code: 514, msg: "AppID/AppSecret required" }, 200);
+    }
+
+    const declared = resolveDeclaredEnv(peeled.env, body?.Env ?? body?.env, url.searchParams.get("env"));
+    if (!declared.ok) {
+      return c.json({ code: 514, msg: declared.error }, 200);
     }
 
     const result = apps.registerOrAuth({ appId, appSecret });
@@ -137,13 +157,16 @@ export function mountHttpRoutes(params: {
 
     const ticket = tickets.issue(appId, config.ws.serviceId);
     const { wsBase } = publicBase(c, config);
-    const url = `${wsBase}/ws/v2?device_id=${encodeURIComponent(ticket.deviceId)}&service_id=${ticket.serviceId}&app_id=${encodeURIComponent(appId)}&env=${encodeURIComponent(result.app.env)}`;
+    const connectUrl = `${wsBase}/ws/v2?device_id=${encodeURIComponent(ticket.deviceId)}&service_id=${ticket.serviceId}&app_id=${encodeURIComponent(appId)}&env=${encodeURIComponent(declared.env)}`;
+    console.info(
+      `[endpoint] app=${appId} env=${declared.env} source=${declared.source}`,
+    );
 
     return c.json({
       code: 0,
       msg: "ok",
       data: {
-        URL: url,
+        URL: connectUrl,
         ClientConfig: {
           PingInterval: config.ws.pingIntervalSec,
           ReconnectCount: config.ws.reconnectCount,
@@ -152,12 +175,25 @@ export function mountHttpRoutes(params: {
         },
       },
     });
-  });
+  };
 
-  app.all("/open-apis/*", async (c) => {
+  app.post("/e/:env/callback/ws/endpoint", handleEndpoint);
+  app.post("/callback/ws/endpoint", handleEndpoint);
+
+  const proxyOpenApi = async (c: Context) => {
     const started = Date.now();
     const url = new URL(c.req.url);
-    const pathWithQuery = `${url.pathname}${url.search}`;
+    const peeled = peelEnvPrefix(url.pathname);
+    if (peeled.invalidEnv) {
+      return c.json(
+        {
+          code: 400,
+          msg: `unknown env "${peeled.invalidEnv}"; use dev, test, staging, or prod`,
+        },
+        400,
+      );
+    }
+    const pathWithQuery = `${peeled.pathname}${url.search}`;
     const target = `${config.upstream.domain}${pathWithQuery}`;
     const method = c.req.method;
     const reqHeaders = new Headers();
@@ -237,5 +273,43 @@ export function mountHttpRoutes(params: {
       statusText: upstreamResp.statusText,
       headers: outHeaders,
     });
-  });
+  };
+
+  app.all("/e/:env/open-apis/*", proxyOpenApi);
+  app.all("/open-apis/*", proxyOpenApi);
+}
+
+function resolveDeclaredEnv(
+  fromPath: AppEnv | undefined,
+  fromBody: string | undefined,
+  fromQuery: string | null,
+):
+  | { ok: true; env: AppEnv; source: "domain" | "body" | "query" }
+  | { ok: false; error: string } {
+  if (fromPath) return { ok: true, env: fromPath, source: "domain" };
+  if (fromBody) {
+    const env = tryParseAppEnv(fromBody);
+    if (!env) {
+      return {
+        ok: false,
+        error: `unknown env "${fromBody}"; use dev, test, staging, or prod`,
+      };
+    }
+    return { ok: true, env, source: "body" };
+  }
+  if (fromQuery) {
+    const env = tryParseAppEnv(fromQuery);
+    if (!env) {
+      return {
+        ok: false,
+        error: `unknown env "${fromQuery}"; use dev, test, staging, or prod`,
+      };
+    }
+    return { ok: true, env, source: "query" };
+  }
+  return {
+    ok: false,
+    error:
+      "env required: set LARK_APP_ENV, or point domain at http://<gateway>/e/<dev|test|staging|prod>",
+  };
 }

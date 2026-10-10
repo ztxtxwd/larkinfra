@@ -121,7 +121,13 @@ export function attachDownstreamWs(params: {
 
     const instanceId = randomUUID();
     const serviceId = config.ws.serviceId;
-    const env = resolveAppEnv(apps.list(), appId, parseEnvFromUrl(req.url));
+    const declared = parseEnvFromUrl(req.url);
+    const env = resolveAppEnv(declared);
+    if (!declared) {
+      console.warn(
+        `[downstream] app=${appId} instance env missing on connect URL, defaulting to ${env}`,
+      );
+    }
     registry.register({
       instanceId,
       appId,
