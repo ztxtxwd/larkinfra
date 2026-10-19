@@ -1,9 +1,8 @@
-import type { AppConfig, AppEnv } from "@larkinfra/shared";
+import type { AppConfig } from "@larkinfra/shared";
 
 export type RegisterAppInput = {
   appId: string;
   appSecret: string;
-  env?: AppEnv;
   upstreamConnections?: number;
 };
 
@@ -19,8 +18,7 @@ export class AppRegistry {
   private apps = new Map<string, AppConfig>();
 
   constructor(
-    private defaults: { env: AppEnv; upstreamConnections: number } = {
-      env: "dev",
+    private defaults: { upstreamConnections: number } = {
       upstreamConnections: 1,
     },
   ) {}
@@ -56,13 +54,12 @@ export class AppRegistry {
     const app: AppConfig = {
       appId: input.appId,
       appSecret: input.appSecret,
-      env: input.env ?? this.defaults.env,
       upstreamConnections:
         input.upstreamConnections ?? this.defaults.upstreamConnections,
     };
     this.apps.set(app.appId, app);
     console.info(
-      `[apps] registered app=${app.appId} env=${app.env} upstream=${app.upstreamConnections}`,
+      `[apps] registered app=${app.appId} upstream=${app.upstreamConnections}`,
     );
     return { ok: true, app, created: true };
   }

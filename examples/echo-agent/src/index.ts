@@ -12,7 +12,7 @@ try {
   process.exit(1);
 }
 
-const { appId, appSecret, domain, configPath } = runtime;
+const { appId, appSecret, domain, env, configPath } = runtime;
 const instanceName = process.env.INSTANCE_NAME ?? `agent-${process.pid}`;
 
 const client = new Lark.Client({
@@ -29,7 +29,7 @@ const wsClient = new Lark.WSClient({
 });
 
 console.info(
-  `[${instanceName}] domain=${domain} appId=${appId}` +
+  `[${instanceName}] env=${env} domain=${domain} appId=${appId}` +
     (configPath ? ` config=${configPath}` : ""),
 );
 

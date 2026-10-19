@@ -1,12 +1,15 @@
 import fs from "node:fs";
 import YAML from "yaml";
+import { domainWithEnv, parseAppEnv, tryParseAppEnv, type AppEnv } from "./app-env.js";
 import { findUpFile, loadEnv } from "./env.js";
 import { parseListen } from "./config.js";
 
 export interface AgentRuntimeConfig {
   appId: string;
   appSecret: string;
+  /** Domain passed to the official SDK, including `/e/{env}`. */
   domain: string;
+  env: AppEnv;
   configPath?: string;
 }
 
@@ -39,7 +42,7 @@ export function loadAgentRuntimeConfig(): AgentRuntimeConfig {
 
   const appId = process.env.LARK_APP_ID;
   const appSecret = process.env.LARK_APP_SECRET;
-  const domain =
+  const baseDomain =
     process.env.LARK_DOMAIN ?? fileDomain ?? "http://127.0.0.1:18787";
 
   if (!appId || !appSecret) {
@@ -48,5 +51,14 @@ export function loadAgentRuntimeConfig(): AgentRuntimeConfig {
     );
   }
 
-  return { appId, appSecret, domain, configPath };
+  const rawEnv = process.env.LARK_APP_ENV?.trim();
+  if (rawEnv && !tryParseAppEnv(rawEnv)) {
+    throw new Error(
+      `LARK_APP_ENV 无法识别：${rawEnv}。可用 dev、test、staging、prod（stage 视为 staging）`,
+    );
+  }
+  const env = parseAppEnv(rawEnv, "dev");
+  const domain = domainWithEnv(baseDomain, env);
+
+  return { appId, appSecret, domain, env, configPath };
 }

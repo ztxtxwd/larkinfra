@@ -11,17 +11,11 @@ export const AppConfigSchema = z.object({
   appId: z.string().min(1),
   appSecret: z.string().min(1),
   upstreamConnections: z.number().int().min(0).default(1),
-  /**
-   * Feishu application environment this appId belongs to
-   * (dev / test / staging / prod). Inherited by connected agent instances.
-   */
-  env: AppEnvSchema.default("dev"),
 });
 
 /** Defaults applied when an app auto-registers via agent connect. */
 export const AppDefaultsSchema = z
   .object({
-    env: AppEnvSchema.default("dev"),
     upstreamConnections: z.number().int().min(0).default(1),
   })
   .default({});
@@ -75,17 +69,16 @@ export const GatewayConfigSchema = z.object({
     .default({}),
 });
 
-/** Resolve Feishu app env for an instance: URL override → registered app.env → `dev`. */
+/**
+ * Instance env comes from the value the agent declared at connect time
+ * (query on the downstream URL). It is not taken from config.yaml.
+ * Missing or unknown values fall back to `dev`.
+ */
 export function resolveAppEnv(
-  apps: Array<{ appId: string; env: AppEnv }>,
-  appId: string,
   override?: string | string[] | null,
 ): AppEnv {
-  const app = apps.find((a) => a.appId === appId);
-  const fallback = app?.env ?? "dev";
   const raw = Array.isArray(override) ? override[0] : override;
-  if (raw) return parseAppEnv(raw, fallback);
-  return fallback;
+  return parseAppEnv(raw, "dev");
 }
 
 export type GatewayConfig = z.infer<typeof GatewayConfigSchema>;

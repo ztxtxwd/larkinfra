@@ -34,16 +34,18 @@ pnpm --filter @larkinfra/gateway dev
 - 同端口：`http://127.0.0.1:18787/ui/`（admin token 默认 `dev-token`）
 - 或独立开发：`pnpm --filter @larkinfra/web dev` → `http://127.0.0.1:5173/ui/`
 
-另开终端跑 Agent（读 `.env` 中的凭证，连接网关时自动完成应用注册）：
+另开终端跑 Agent（读 `.env` 中的凭证，连接网关时自动完成应用注册）。同一 App ID 可以同时起多个环境，环境在进程启动时声明，不读 `config.yaml`：
 
 ```bash
-INSTANCE_NAME=agent-a pnpm --filter @larkinfra/echo-agent start
-INSTANCE_NAME=agent-b pnpm --filter @larkinfra/echo-agent start
+LARK_APP_ENV=dev INSTANCE_NAME=agent-dev pnpm --filter @larkinfra/echo-agent start
+LARK_APP_ENV=prod INSTANCE_NAME=agent-prod pnpm --filter @larkinfra/echo-agent start
 ```
+
+未设置 `LARK_APP_ENV` 时示例 Agent 按 `dev` 声明。也接受 `test`、`staging`（`stage` 视为 staging）。
 
 滚动更新时由网关经 WS 下发 `graceful` / `force` 生命周期信号（见 [`examples/echo-agent/README.md`](examples/echo-agent/README.md)）。
 
-也可用环境变量：`LARK_APP_ID` / `LARK_APP_SECRET` / `LARK_DOMAIN`。网关 `appDefaults.env` 控制自动注册应用的默认环境（`dev` | `test` | `staging` | `prod`）；实例上线后继承该值。网关不支持在 `config.yaml` 预配 app，一律由 Agent 接入时自动注册。
+也可用环境变量：`LARK_APP_ID` / `LARK_APP_SECRET` / `LARK_DOMAIN`。网关不支持在 `config.yaml` 预配 app，一律由 Agent 接入时自动注册。实例环境在进程启动时用 `LARK_APP_ENV` 声明，不读 `config.yaml`。
 
 飞书开发者后台将该企业自建应用的事件订阅设为「使用长连接接收事件」，并确保网关进程在线。
 
@@ -77,16 +79,19 @@ pnpm pm2:delete
 2. SDK 调用网关 `/callback/ws/endpoint`
 3. 网关校验：未见过则注册，已见过则核对 secret
 4. 按 `appDefaults.upstreamConnections` 拉起对该应用的飞书上游长连接
-5. 下发下游 WS URL，Agent 实例上线
+5. 下发下游 WS URL（带上该进程声明的 `env`），Agent 实例上线
 6. 该应用最后一个实例下线时关闭飞书上游；若握手后 `ws.upstreamIdleTimeoutMs`（默认 60s）内没有实例连上，同样关闭
 
-同一 `appId` 后续实例复用已注册凭证；secret 不匹配则拒绝。
+同一 `appId` 后续实例复用已注册凭证；secret 不匹配则拒绝。实例环境互不影响：dev 进程和 prod 进程可以同时在线。
+
+官方 SDK 只把 `domain` 拼到 `/callback/ws/endpoint`，没有单独的环境字段。示例 Agent 读取 `LARK_APP_ENV` 后把 domain 改成 `http://<gateway>/e/<env>`。直接使用官方 SDK 时，把 `domain` 设成同样的形式即可，例如 `http://127.0.0.1:18787/e/prod`。`stage` 会按 `staging` 登记。未声明环境的连接会被拒绝。
+
 ## 客户端用法
 
 ```ts
 import * as Lark from "@larksuiteoapi/node-sdk";
 
-const domain = "http://127.0.0.1:18787";
+const domain = "http://127.0.0.1:18787/e/dev"; // dev | test | staging | prod
 const client = new Lark.Client({ appId, appSecret, domain });
 const wsClient = new Lark.WSClient({ appId, appSecret, domain });
 ```
