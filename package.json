@@ -14,8 +14,10 @@
     "pm2:reload": "pnpm pm2:build && pm2 reload ecosystem.config.cjs",
     "pm2:stop": "pm2 stop ecosystem.config.cjs",
     "pm2:delete": "pm2 delete ecosystem.config.cjs",
-    "pm2:logs": "pm2 logs larkinfra-gateway --lines 50"
-  },  "engines": {
+    "pm2:logs": "pm2 logs larkinfra-gateway --lines 50",
+    "deploy:remote": "bash scripts/deploy.sh"
+  },
+  "engines": {
     "node": ">=20"
   },
   "dependencies": {
